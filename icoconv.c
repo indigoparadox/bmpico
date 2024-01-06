@@ -19,6 +19,7 @@ int main( int argc, char* argv[] ) {
    uint8_t bmp_bpp = 16;
  
    if( 3 > argc ) {
+      fprintf( stderr, "usage: %s <bmp_file_in> <ico_file_out>\n", argv[0] );
       retval = 1;
       goto cleanup;
    }

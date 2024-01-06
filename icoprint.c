@@ -16,6 +16,7 @@ int main( int argc, char* argv[] ) {
    uint8_t px_byte = 0;
    
    if( 2 > argc ) {
+      fprintf( stderr, "usage: %s <ico_file>\n", argv[0] );
       retval = 1;
       goto cleanup;
    }
