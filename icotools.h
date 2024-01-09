@@ -66,6 +66,10 @@
    buf8 = ((num) >> 24) & 0xff; \
    fwrite( &buf8, 1, 1, file );
 
+#define icotools_xor_mask_sz( w_px, h_px ) (((w_px) / 2) * (h_px))
+
+#define icotools_and_mask_sz( h_px ) (4 * (h_px))
+
 int icotools_read_file(
    const char* filename, uint8_t** buffer, size_t* sz, size_t offset
 ) {

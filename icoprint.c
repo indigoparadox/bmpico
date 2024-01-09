@@ -10,10 +10,14 @@ int main( int argc, char* argv[] ) {
    uint16_t ico_field_num_imgs = 0;
    uint32_t ico_img_offset = 0;
    uint32_t ico_img_sz = 0;
+   uint8_t bmp_w_px = 0;
+   uint8_t bmp_h_px = 0;
    size_t ico_sz = 0;
    size_t ico_bytes_read = 0;
    size_t i = 0;
    uint8_t px_byte = 0;
+   size_t ico_xor_mask_sz = 0;
+   size_t ico_and_mask_sz = 0;
    
    if( 2 > argc ) {
       fprintf( stderr, "usage: %s <ico_file>\n", argv[0] );
@@ -49,23 +53,16 @@ int main( int argc, char* argv[] ) {
       goto cleanup;
    }
 
-   if( 16 != ico_bytes[6] ) { 
-      fprintf( stderr, "invalid: field ico_width: %u\n", ico_bytes[6] );
-      retval = 16;
-      goto cleanup;
-   }
-
-   if( 16 != ico_bytes[7] ) { 
-      fprintf( stderr, "invalid: field ico_height: %u\n", ico_bytes[7] );
-      retval = 16;
-      goto cleanup;
-   }
-
    if( 16 != ico_bytes[8] ) { 
       fprintf( stderr, "invalid: field ico_colors: %u\n", ico_bytes[8] );
       retval = 16;
       goto cleanup;
    }
+
+   bmp_w_px = icotools_read_u32( ico_bytes,
+      ICO_HEADER_SZ + BMPINFO_OFFSET_WIDTH );
+   bmp_h_px = icotools_read_u32( ico_bytes,
+      ICO_HEADER_SZ + BMPINFO_OFFSET_HEIGHT );
 
    ico_img_sz = icotools_read_u32( ico_bytes, 14 );
    ico_img_offset = icotools_read_u32( ico_bytes, 18 );
@@ -73,10 +70,8 @@ int main( int argc, char* argv[] ) {
       "ico data at %u bytes, %u bytes long\n", ico_img_offset, ico_img_sz );
 
    /* Print bitmap header info. */
-   printf( "bitmap width: %u\n", icotools_read_u32( ico_bytes,
-      ICO_HEADER_SZ + 4 ) );
-   printf( "bitmap height: %u\n", icotools_read_u32( ico_bytes,
-      ICO_HEADER_SZ + 8 ) );
+   printf( "bitmap width: %u\n", bmp_w_px );
+   printf( "bitmap height: %u\n", bmp_h_px );
    printf( "bitmap color planes: %u\n", icotools_read_u16( ico_bytes,
       ICO_HEADER_SZ + 12 ) );
    printf( "bitmap bpp: %u\n", icotools_read_u16( ico_bytes,
@@ -102,8 +97,10 @@ int main( int argc, char* argv[] ) {
    }
 
    /* Print bitmap data. */
+   ico_xor_mask_sz = bmp_h_px * (bmp_w_px / 2);
    ico_px = &(ico_bytes[ICO_HEADER_SZ + BMP_HEADER_SZ + COLOR_TBL_SZ]);
-   for( i = 0 ; ICO_W_PX * ICO_H_PX > i ; i++ ) {
+   printf( "\n00: " );
+   for( i = 0 ; ico_xor_mask_sz > i ; i++ ) {
       if( 0 != i % 2 ) {
          px_byte = ico_px[i / 2] & 0x0f;
       } else {
@@ -112,21 +109,21 @@ int main( int argc, char* argv[] ) {
 
       printf( "0x%01x ", px_byte );
 
-      if( 0 == (i + 1) % ICO_W_PX ) {
-         printf( "\n%02ld: ", (i / 8) + 1 );
+      if( 0 == (i + 1) % bmp_w_px ) {
+         printf( "\n%02ld: ", (i / bmp_w_px) + 1 );
       }
    }
 
    /* Print AND mask. */
-   ico_px = &(ico_bytes[ICO_HEADER_SZ + BMP_HEADER_SZ + COLOR_TBL_SZ + 128]);
-   for( i = 0 ; 64 > i ; i++ ) {
+   ico_px = &(ico_bytes[ICO_HEADER_SZ + BMP_HEADER_SZ + COLOR_TBL_SZ + ico_xor_mask_sz]);
+   ico_and_mask_sz = 4 * bmp_h_px;
+   for( i = 0 ; ico_and_mask_sz > i ; i++ ) {
       if( 0 == i % 4 ) {
-         printf( "\n" );
+         printf( "\n%02ld: ", i / 4 );
       }
 
       icotools_bprintf( ico_px[i] );
       printf( " " );
-
    }
 
    printf( "\n" );
