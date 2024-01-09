@@ -4,7 +4,7 @@
 all: icoconv icoprint
 
 %: %.c
-	gcc -o $@ $<
+	gcc -Wunused -Werror -o $@ $<
 
 clean:
 	rm -f icoconv icoprint

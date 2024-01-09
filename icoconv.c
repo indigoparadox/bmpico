@@ -3,25 +3,23 @@
 
 /* Write an ICO TOC entry.
  */
-size_t write_ico_entry(
-   FILE* ico_file, uint8_t bmp_w_px, uint8_t bmp_h_px, uint8_t bmp_bpp
-) {
+size_t write_ico_entry( FILE* ico_file, struct ICOTOOLS_BMP_INFO* bmp ) {
    size_t ico_pos_out = 0;
    uint8_t byte_buf = 0;
    size_t ico_xor_mask_sz = 0;
    size_t ico_and_mask_sz = 0;
 
-   ico_xor_mask_sz = icotools_xor_mask_sz( bmp_w_px,  bmp_h_px );
-   ico_and_mask_sz = icotools_and_mask_sz( bmp_h_px );
+   ico_xor_mask_sz = icotools_xor_mask_sz( bmp->w_px,  bmp->h_px );
+   ico_and_mask_sz = icotools_and_mask_sz( bmp->h_px );
 
-   icotools_write_u8( ico_file, bmp_w_px, byte_buf );
-   icotools_write_u8( ico_file, bmp_h_px, byte_buf );
-   icotools_write_u8( ico_file, bmp_bpp, byte_buf );
+   icotools_write_u8( ico_file, bmp->w_px, byte_buf );
+   icotools_write_u8( ico_file, bmp->h_px, byte_buf );
+   icotools_write_u8( ico_file, bmp->pal_sz, byte_buf );
    icotools_write_u8( ico_file, 0, byte_buf );
-   icotools_write_u16( ico_file, 0, byte_buf );
-   icotools_write_u16( ico_file, 0, byte_buf );
+   icotools_write_u16( ico_file, 1 /* color planes */, byte_buf );
+   icotools_write_u16( ico_file, 4 /* bpp */, byte_buf );
    icotools_write_u32(
-      ico_file, BMP_HEADER_SZ + COLOR_TBL_SZ + 
+      ico_file, BMP_HEADER_SZ + (bmp->pal_sz * 4) + 
       ico_and_mask_sz + ico_xor_mask_sz, byte_buf );
    ico_pos_out = ftell( ico_file );
    icotools_write_u32( ico_file, 0 /* offset placeholder */, byte_buf );
@@ -30,7 +28,7 @@ size_t write_ico_entry(
 }
 
 void write_bmp_header(
-   FILE* ico_file, uint8_t bmp_w_px, uint8_t bmp_h_px, uint8_t* color_tbl
+   FILE* ico_file, struct ICOTOOLS_BMP_INFO* bmp, uint8_t* color_tbl
 ) {
    uint8_t byte_buf = 0;
    size_t ico_and_mask_sz = 0;
@@ -38,22 +36,22 @@ void write_bmp_header(
 
    /* Write bitmap header. */
    icotools_write_u32( ico_file, 40, byte_buf );
-   icotools_write_u32( ico_file, bmp_w_px, byte_buf );
-   icotools_write_u32( ico_file, bmp_h_px * 2, byte_buf );
+   icotools_write_u32( ico_file, bmp->w_px, byte_buf );
+   icotools_write_u32( ico_file, bmp->h_px * 2, byte_buf );
    icotools_write_u16( ico_file, 1 /* color planes */, byte_buf );
    icotools_write_u16( ico_file, 4 /* bpp */, byte_buf );
    icotools_write_u32( ico_file, 0 /* compression */, byte_buf );
-   ico_xor_mask_sz = icotools_xor_mask_sz( bmp_w_px,  bmp_h_px );
-   ico_and_mask_sz = icotools_and_mask_sz( bmp_h_px );
+   ico_xor_mask_sz = icotools_xor_mask_sz( bmp->w_px,  bmp->h_px );
+   ico_and_mask_sz = icotools_and_mask_sz( bmp->h_px );
    icotools_write_u32(
       ico_file, ico_xor_mask_sz + ico_and_mask_sz, byte_buf );
    icotools_write_u32( ico_file, 0, byte_buf );
    icotools_write_u32( ico_file, 0, byte_buf );
-   icotools_write_u32( ico_file, 16 /* palette sz */, byte_buf );
+   icotools_write_u32( ico_file, bmp->pal_sz, byte_buf );
    icotools_write_u32( ico_file, 0, byte_buf );
 
    /* Copy color table. */
-   fwrite( color_tbl, 1, COLOR_TBL_SZ, ico_file );
+   fwrite( color_tbl, 1, bmp->pal_sz * 4, ico_file );
 }
 
 /* Go back to the given offset and write the current file offset as a 32-bit
@@ -70,61 +68,8 @@ void update_ico_entry_offset( FILE* ico_file, size_t offset_pos ) {
    fseek( ico_file, prev_pos, SEEK_SET );
 }
 
-int verify_bmp(
-   uint8_t* bmp_bytes, uint8_t* bmp_w_px, uint8_t* bmp_h_px, uint8_t* bmp_bpp
-) {
-   int retval = 0;
-
-   if( 40 != icotools_read_u16( bmp_bytes, 0 ) ) {
-      fprintf( stderr, "invalid bitmap header!\n" );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-   *bmp_bpp = icotools_read_u16( bmp_bytes, BMPINFO_OFFSET_BPP );
-   if( 8 != *bmp_bpp ) {
-      fprintf( stderr, "invalid bitmap bpp: %u\n", *bmp_bpp );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-   *bmp_w_px = icotools_read_u32( bmp_bytes, BMPINFO_OFFSET_WIDTH );
-   *bmp_h_px = icotools_read_u32( bmp_bytes, BMPINFO_OFFSET_HEIGHT );
-
-   if( 16 != *bmp_w_px && 32 != *bmp_w_px ) {
-      fprintf( stderr, "invalid bitmap width: %u\n", *bmp_w_px );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-   if( 16 != *bmp_h_px && 32 != *bmp_h_px ) {
-      fprintf( stderr, "invalid bitmap height: %u\n", *bmp_h_px );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-   if( 0 != icotools_read_u16( bmp_bytes, BMPINFO_OFFSET_CMP ) ) {
-      fprintf( stderr,
-         "invalid bitmap compression: %u\n",
-         icotools_read_u16( bmp_bytes, BMPINFO_OFFSET_CMP ) );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-   if( 16 != icotools_read_u16( bmp_bytes, BMPINFO_OFFSET_PAL_SZ ) ) {
-      fprintf( stderr,
-         "invalid bitmap palette size: %u\n",
-         icotools_read_u16( bmp_bytes, BMPINFO_OFFSET_PAL_SZ ) );
-      retval = ICOTOOLS_ERR_READ;
-      goto cleanup;
-   }
-
-cleanup:
-   return retval;
-}
-
 int convert_bmp_ico_data(
-   FILE* ico_file, uint8_t* bmp_px_bytes, uint8_t bmp_w_px, uint8_t bmp_h_px
+   FILE* ico_file, uint8_t* bmp_px_bytes, struct ICOTOOLS_BMP_INFO* bmp
 ) {
    size_t and_mask_byte_iter = 0;
    size_t i = 0;
@@ -135,22 +80,22 @@ int convert_bmp_ico_data(
    size_t ico_and_mask_sz = 0;
    int retval = 0;
 
-   ico_xor_mask_sz = icotools_xor_mask_sz( bmp_w_px,  bmp_h_px );
-   ico_and_mask_sz = icotools_and_mask_sz( bmp_h_px );
+   ico_xor_mask_sz = icotools_xor_mask_sz( bmp->w_px,  bmp->h_px );
+   ico_and_mask_sz = icotools_and_mask_sz( bmp->h_px );
 
-   ico_and_mask = calloc( 4, bmp_h_px ); /* 4-byte rows always! */
+   ico_and_mask = calloc( 4, bmp->h_px ); /* 4-byte rows always! */
    if( NULL == ico_and_mask ) {
       retval = ICOTOOLS_ERR_ALLOC;
       goto cleanup;
    }
 
-   ico_xor_mask = calloc( bmp_w_px / 2 /* 4bpp rows */, bmp_h_px );
+   ico_xor_mask = calloc( bmp->w_px / 2 /* 4bpp rows */, bmp->h_px );
    if( NULL == ico_xor_mask ) {
       retval = ICOTOOLS_ERR_ALLOC;
       goto cleanup;
    }
 
-   for( i = 0 ; bmp_w_px * bmp_h_px > i ; i++ ) {
+   for( i = 0 ; bmp->w_px * bmp->h_px > i ; i++ ) {
       /* Fill out the XOR mask (bitmap data). */
 
       if( ICO_TRANSPARENT_COLOR == bmp_px_bytes[i] ) {
@@ -183,7 +128,7 @@ int convert_bmp_ico_data(
          /* Move to a new byte every 8 pixels (since 1bpp). */
          and_mask_byte_iter++;
       }
-      if( ((16 == bmp_w_px) && (0 == (i + 1) % 16)) ) {
+      if( ((16 == bmp->w_px) && (0 == (i + 1) % 16)) ) {
          /* This is still technically bitmap data, so fill out rows to be
           * multiples of 4!
           */
@@ -216,12 +161,9 @@ int main( int argc, char* argv[] ) {
    size_t bmp_sz = 0;
    uint8_t byte_buf = 0;
    size_t i = 0;
-   uint8_t* bmp_px_bytes = NULL;
-   uint8_t bmp_w_px[128];
-   uint8_t bmp_h_px[128];
    size_t ico_offsets[128];
-   uint8_t bmp_bpp[128];
    size_t prev_pos = 0;
+   struct ICOTOOLS_BMP_INFO bmp_info[128];
  
    if( 3 > argc ) {
       fprintf( stderr, "usage: %s <bmp_file_in> <ico_file_out>\n", argv[0] );
@@ -252,14 +194,13 @@ int main( int argc, char* argv[] ) {
          goto cleanup;
       }
 
-      retval = verify_bmp(
-         bmp_bytes[i], &(bmp_w_px[i]), &(bmp_h_px[i]), &(bmp_bpp[i]) );
+      retval = icotools_verify_bmp( bmp_bytes[i], &(bmp_info[i]),
+         ICOTOOLS_FLAG_VERIFY_BPP | ICOTOOLS_FLAG_VERIFY_DIMX );
       if( 0 != retval ) {
          goto cleanup;
       }
 
-      ico_offsets[i] =
-         write_ico_entry( ico_file, bmp_w_px[i], bmp_h_px[i], bmp_bpp[i] );
+      ico_offsets[i] = write_ico_entry( ico_file, &(bmp_info[i]) );
    }
 
    /* Jump back up to the ICO header and write the image count. */
@@ -272,12 +213,12 @@ int main( int argc, char* argv[] ) {
    for( i = 1 ; argc - 1 > i ; i++ ) {
 
       update_ico_entry_offset( ico_file, ico_offsets[i] );
-      write_bmp_header( ico_file, bmp_w_px[i], bmp_h_px[i],
+      write_bmp_header( ico_file, &(bmp_info[i]),
          &(bmp_bytes[i][BMP_HEADER_SZ]) );
 
       retval = convert_bmp_ico_data( ico_file, 
-         &(bmp_bytes[i][BMP_HEADER_SZ + COLOR_TBL_SZ]),
-         bmp_w_px[i], bmp_h_px[i] );
+         &(bmp_bytes[i][BMP_HEADER_SZ + (bmp_info[i].pal_sz * 4)]),
+         &(bmp_info[i]) );
       if( 0 != retval ) {
          goto cleanup;
       }
