@@ -69,7 +69,8 @@ void update_ico_entry_offset( FILE* ico_file, size_t offset_pos ) {
 }
 
 int convert_bmp_ico_data(
-   FILE* ico_file, uint8_t* bmp_px_bytes, struct ICOTOOLS_BMP_INFO* bmp
+   FILE* ico_file, uint8_t* bmp_px_bytes, struct ICOTOOLS_BMP_INFO* bmp,
+   uint8_t trans_pal_idx
 ) {
    size_t and_mask_byte_iter = 0;
    size_t i = 0;
@@ -98,7 +99,7 @@ int convert_bmp_ico_data(
    for( i = 0 ; bmp->w_px * bmp->h_px > i ; i++ ) {
       /* Fill out the XOR mask (bitmap data). */
 
-      if( ICO_TRANSPARENT_COLOR == bmp_px_bytes[i] ) {
+      if( trans_pal_idx == bmp_px_bytes[i] ) {
          /* In addition to having a 0 in the AND mask below, the transparent
           * color must also be set to 0!
           */
@@ -120,7 +121,7 @@ int convert_bmp_ico_data(
       if( 0 != i % 8 ) {
          ico_and_mask[and_mask_byte_iter] <<= 1;
       }
-      if( ICO_TRANSPARENT_COLOR == bmp_px_bytes[i] ) {
+      if( trans_pal_idx == bmp_px_bytes[i] ) {
          /* 1 = transparent. */
          ico_and_mask[and_mask_byte_iter] |= 0x01;
       }
@@ -164,6 +165,8 @@ int main( int argc, char* argv[] ) {
    size_t ico_offsets[128];
    size_t prev_pos = 0;
    struct ICOTOOLS_BMP_INFO bmp_info[128];
+   uint8_t trans_pal_idx = 0;
+   uint8_t bmp_count = 0;
  
    if( 3 > argc ) {
       fprintf( stderr, "usage: %s <bmp_file_in> <ico_file_out>\n", argv[0] );
@@ -187,20 +190,35 @@ int main( int argc, char* argv[] ) {
 
    /* Skip program name and output file. */
    for( i = 1 ; argc - 1 > i ; i++ ) {
+      if( 0 == strncmp( argv[i], "-t", 3 ) ) {
+         /* Grab the new transparent palette color. */
+         assert( argc - 1 > i + 1 );
+         i++;
+         trans_pal_idx = atoi( argv[i] );
+         printf( "transparent color: %d\n", trans_pal_idx );
+         continue;
+      }
 
       /* Read bitmap file. */
-      retval = icotools_read_file( argv[i], &(bmp_bytes[i]), &bmp_sz, 14 );
+      retval = icotools_read_file(
+         argv[i], &(bmp_bytes[bmp_count]), &bmp_sz, 14 );
       if( 0 != retval ) {
          goto cleanup;
       }
 
-      retval = icotools_verify_bmp( bmp_bytes[i], &(bmp_info[i]),
+      retval = icotools_verify_bmp(
+         bmp_bytes[bmp_count], &(bmp_info[bmp_count]),
          ICOTOOLS_FLAG_VERIFY_BPP | ICOTOOLS_FLAG_VERIFY_DIMX );
       if( 0 != retval ) {
          goto cleanup;
       }
 
-      ico_offsets[i] = write_ico_entry( ico_file, &(bmp_info[i]) );
+      printf( "reading bitmap %lu: %s\n", i, argv[i] );
+
+      ico_offsets[bmp_count] = write_ico_entry(
+         ico_file, &(bmp_info[bmp_count]) );
+
+      bmp_count++;
    }
 
    /* Jump back up to the ICO header and write the image count. */
@@ -210,7 +228,9 @@ int main( int argc, char* argv[] ) {
    fseek( ico_file, prev_pos, SEEK_SET );
 
    /* Begin writing the icon bitmaps. */
-   for( i = 1 ; argc - 1 > i ; i++ ) {
+   for( i = 0 ; bmp_count > i ; i++ ) {
+
+      printf( "writing bitmap: %lu\n", i );
 
       update_ico_entry_offset( ico_file, ico_offsets[i] );
       write_bmp_header( ico_file, &(bmp_info[i]),
@@ -218,7 +238,7 @@ int main( int argc, char* argv[] ) {
 
       retval = convert_bmp_ico_data( ico_file, 
          &(bmp_bytes[i][BMP_HEADER_SZ + (bmp_info[i].pal_sz * 4)]),
-         &(bmp_info[i]) );
+         &(bmp_info[i]), trans_pal_idx );
       if( 0 != retval ) {
          goto cleanup;
       }
