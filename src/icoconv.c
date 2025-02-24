@@ -169,7 +169,11 @@ int main( int argc, char* argv[] ) {
    uint8_t bmp_count = 0;
  
    if( 3 > argc ) {
-      fprintf( stderr, "usage: %s <bmp_file_in> <ico_file_out>\n", argv[0] );
+      fprintf( stderr, "usage: %s [-t index] <bmp_file_in...> <ico_file_out>\n", argv[0] );
+      fprintf( stderr, "\n" );
+      fprintf( stderr, " -t index : use the color at [index] on the palette as transparent\n" );
+      fprintf( stderr, "\n" );
+      fprintf( stderr, "multiple input bitmaps will be muxed into a single ico\n" );
       retval = 1;
       goto cleanup;
    }
