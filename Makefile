@@ -13,7 +13,7 @@ install:
 deb:
 	checkinstall \
 		--maintainer "indigo.repo@interfinitydynamics.info" \
-		--pkgversion "`git tag | grep "^v" | tail -1`"
+		--pkgversion "`git tag | grep "^[0-9.]*$$" | tail -1`"
 
 clean:
 	rm -rf icoconv icoprint doc-pak bmpico*.deb
